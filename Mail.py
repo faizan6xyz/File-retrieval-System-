@@ -154,9 +154,9 @@ def run_email_agent(user_goal: str):
             tool_name, tool_input = action_data
             try:
                 params = json.loads(tool_input)
-                print(f"🔧 Calling: {tool_name}({params})")
+                print(f" Calling: {tool_name}({params})")
                 result = TOOLS[tool_name](params)
-                print(f"📤 Result: {result}\n")
+                print(f"Result: {result}\n")
             except Exception as e:
                 result = f"Tool error: {e}"
             messages.append({"role": "assistant", "content": reply})
