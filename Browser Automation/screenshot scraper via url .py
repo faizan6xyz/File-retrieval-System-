@@ -7,7 +7,7 @@ URL = input("Enter the URL: ").strip()
 OUTPUT_DIR = Path("dataset")
 VIEWPORT = {"width": 1280, "height": 800}
 TIMEOUT_MS = 15000
-FULL_PAGE = False
+FULL_PAGE = True
 def url_to_filename(url: str, index: int) -> str:
     clean = re.sub(r"https?://", "", url)
     clean = re.sub(r"[^\w\-]", "_", clean)
@@ -22,7 +22,7 @@ async def screenshot_url(url: str):
         try:
             filename = url_to_filename(url, 1)
             save_path = OUTPUT_DIR / filename
-            await page.goto(url, timeout=TIMEOUT_MS, wait_until="networkidle")
+            await page.goto(url, timeout=TIMEOUT_MS, wait_until="domcontentloaded")
             await page.screenshot(path=str(save_path), full_page=FULL_PAGE)
             print(f"Screenshot saved to: {save_path}")
         except Exception as e:
