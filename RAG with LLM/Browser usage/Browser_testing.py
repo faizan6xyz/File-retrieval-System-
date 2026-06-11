@@ -7,8 +7,7 @@ from playwright.sync_api import sync_playwright
 from playwright_stealth import Stealth
 client = OpenAI(
     base_url="https://integrate.api.nvidia.com/v1",
-    api_key="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"
-)
+api_key="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")
 NIM_MODEL       = "meta/llama-3.1-8b-instruct"
 AUTH_STATE_FILE = "auth_state.json"
 COOKIES_FILE    = r"C:\Users\faiza\OneDrive\Desktop\youtube_cookies.json"
