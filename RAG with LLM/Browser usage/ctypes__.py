@@ -1,12 +1,9 @@
 import os, ctypes, ctypes.wintypes, sqlite3, tempfile, shutil
-
 src = r"C:\Users\faiza\AppData\Local\Google\Chrome\User Data\Profile 23\Network\Cookies"
 dst = os.path.join(tempfile.mkdtemp(), "Cookies")
-
 print(f"Source: {src}")
 print(f"Source size: {os.path.getsize(src)}")
 print(f"Dest: {dst}")
-
 k32 = ctypes.WinDLL("kernel32", use_last_error=True)
 GENERIC_READ         = 0x80000000
 FILE_SHARE_READ      = 0x00000001
@@ -15,13 +12,11 @@ FILE_SHARE_DELETE    = 0x00000004
 OPEN_EXISTING        = 3
 FILE_FLAG_SEQUENTIAL = 0x08000000
 INVALID_HANDLE       = ctypes.wintypes.HANDLE(-1).value
-
 h = k32.CreateFileW(
     src, GENERIC_READ,
     FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
     None, OPEN_EXISTING, FILE_FLAG_SEQUENTIAL, None
 )
-
 print(f"Handle: {h}  (INVALID={INVALID_HANDLE})")
 if h == INVALID_HANDLE:
     err = ctypes.get_last_error()
@@ -56,6 +51,5 @@ else:
         conn.close()
     else:
         print("ERROR: dest file is empty!")
-
 shutil.rmtree(os.path.dirname(dst), ignore_errors=True)
 input("\nPress Enter...")

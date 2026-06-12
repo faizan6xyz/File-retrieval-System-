@@ -4,10 +4,8 @@ import tempfile
 import shutil
 import ctypes
 import ctypes.wintypes
-
 CHROME_USER_DATA = r"C:\Users\faiza\AppData\Local\Google\Chrome\User Data"
 PROFILE_NAME     = "Profile 23"
-
 def _copy_locked_file(src, dst):
     import subprocess
     src_dir  = os.path.dirname(src)
@@ -42,7 +40,6 @@ def _copy_locked_file(src, dst):
 print("=" * 60)
 print("CHROME COOKIE DIAGNOSTIC")
 print("=" * 60)
-
 # 1. List all files in the Network folder
 net_dir = os.path.join(CHROME_USER_DATA, PROFILE_NAME, "Network")
 print(f"\n[1] Files in {net_dir}:")
@@ -53,7 +50,6 @@ if os.path.exists(net_dir):
         print(f"    {f:<40} {size:>10} bytes")
 else:
     print("    ERROR: Network folder does not exist!")
-
 # 2. Check all possible cookie file locations
 print("\n[2] Checking cookie file locations:")
 candidates = [
@@ -65,7 +61,6 @@ for c in candidates:
     exists = os.path.exists(c)
     size   = os.path.getsize(c) if exists else 0
     print(f"    {'EXISTS' if exists else 'MISSING':<8}  {size:>10} bytes  {c}")
-
 # 3. Try copying and inspecting the main Cookies file
 print("\n[3] Attempting copy + SQLite inspection:")
 cookie_path = os.path.join(CHROME_USER_DATA, PROFILE_NAME, "Network", "Cookies")
@@ -76,7 +71,6 @@ if os.path.exists(cookie_path):
         _copy_locked_file(cookie_path, tmp_db)
         copied_size = os.path.getsize(tmp_db)
         print(f"    Copied file size: {copied_size} bytes")
-
         # Also copy WAL/SHM
         for suffix in ("-wal", "-shm"):
             src = cookie_path + suffix
@@ -84,7 +78,6 @@ if os.path.exists(cookie_path):
                 dst = tmp_db + suffix
                 _copy_locked_file(src, dst)
                 print(f"    Copied {suffix}: {os.path.getsize(dst)} bytes")
-
         # Try opening with different URI modes
         for uri in [
             f"file:{tmp_db}?immutable=1",
@@ -100,7 +93,6 @@ if os.path.exists(cookie_path):
                 print(f"    URI={uri!r:<50}  tables={tables}")
             except Exception as e:
                 print(f"    URI={uri!r:<50}  ERROR: {e}")
-
         # Try with PRAGMA wal_checkpoint
         try:
             conn = sqlite3.connect(tmp_db)
@@ -115,12 +107,10 @@ if os.path.exists(cookie_path):
             conn.close()
         except Exception as e:
             print(f"    wal_checkpoint attempt: ERROR: {e}")
-
     finally:
         shutil.rmtree(tmp_dir, ignore_errors=True)
 else:
     print("    Cookies file not found at expected path")
-
 # 4. Read first 16 bytes of the file to check magic
 print("\n[4] File header (magic bytes):")
 if os.path.exists(cookie_path):
