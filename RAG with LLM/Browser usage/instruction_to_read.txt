@@ -30,5 +30,11 @@ Manually login in once to save the info
 
 
 
+# install dependencies
+pip install openai playwright beautifulsoup4 requests
+playwright install chromium
+
+
+
 
 # you need to do this all only once 
