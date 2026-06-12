@@ -14,7 +14,7 @@ with sync_playwright() as p:
     input("Press Enter...")
     
     
-# Port is openable if i use : 
+# Port is openable for profile 23 if i use : 
 '''
 & "C:\Program Files (x86)\Google\Chrome\Application\chrome.exe" `
 --remote-debugging-port=9222 `

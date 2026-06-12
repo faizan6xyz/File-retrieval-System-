@@ -1,0 +1,32 @@
+Copying the profile for fresh start and Lock conflicts preventation
+
+# Step 1 — Kill Chrome
+taskkill /F /IM chrome.exe /T
+
+# Step 2 — Recreate fresh
+New-Item -ItemType Directory -Path "C:\chrome-debug" -Force
+
+# Step 3 — Copy correctly (note: destination is the PARENT, not the profile folder itself)
+Copy-Item "C:\Users\faiza\AppData\Local\Google\Chrome\User Data\Profile 23" `
+        "C:\chrome-debug\Profile 23" -Recurse -Force
+
+# Step 4 — Verify Cookies file exists
+Test-Path "C:\chrome-debug\Profile 23\Cookies"
+# Must print: True
+
+
+
+
+
+
+
+Manually login in once to save the info
+
+# Launch Chrome with the debug profile
+
+& "C:\Program Files (x86)\Google\Chrome\Application\chrome.exe" `
+--remote-debugging-port=9222 `
+--user-data-dir="C:\chrome-debug" `
+--profile-directory="Profile 23"
+
+login to those account that you need to work the automation on 
