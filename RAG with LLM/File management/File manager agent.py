@@ -423,12 +423,12 @@ def _advance(state: dict, max_steps: int = 20):
         gr.update(visible=True, value="❌ No, skip this"),
         state
     )
-with gr.Blocks(title="File Manager Agent", theme=gr.themes.Monochrome()) as app:
+with gr.Blocks(title="File Manager Agent") as app:
     agent_state = gr.State(empty_state())
     gr.Markdown("""
     #  File Manager Agent
-    **Powered by NVIDIA NIM (Llama 3.1-8B)** — manages your files using natural language.
-    Safe actions (search, list, info) run automatically.
+    **Powered by NVIDIA NIM (Llama 3.1-8B)** — manages your files using natural language.\n
+    Safe actions (search, list, info) run automatically.\n
     Destructive actions (move, delete, organize) always ask you first.
     """)
     with gr.Row():
@@ -444,30 +444,11 @@ with gr.Blocks(title="File Manager Agent", theme=gr.themes.Monochrome()) as app:
                 lines=1
             )
             run_btn = gr.Button("▶ Run Agent", variant="primary")
-        with gr.Column(scale=1):
-            gr.Markdown("""
-            ###  Example goals
-            ```
-            Find all PDF files in my Documents
-            ```
-            ```
-            Show files larger than 500MB in Downloads
-            ```
-            ```
-            Organize Downloads folder by file type
-            ```
-            ```
-            Find duplicate files in Desktop
-            ```
-            ```
-            Delete all .tmp files in C:\\Users\\faiza\\AppData\\Local\\Temp
-            ```
-            """)
+        
     output_box = gr.Textbox(
         label="Agent Output",
         lines=28,
         interactive=False,
-        show_copy_button=True
     )
     with gr.Row():
         yes_btn = gr.Button(" Yes, do it",    variant="primary", visible=False)
