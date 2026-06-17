@@ -297,41 +297,33 @@ def run_agent(goal: str, start_url: str):
     print("\n--- Step 1: Navigate ---")
     nav_result = mcp.call_tool("browser_navigate", {"url": start_url})
     print(f"  ↩ {nav_result[:200]}")
+    mcp.call_tool("browser_wait_for", {"time": 2})
 
-    # ── Step 2: Post-Login Stabilization ──────────────────────────────────────
-    # CRITICAL: After login, the DOM changes completely. We must wait for stability.
-    print("\n--- Step 2: Stabilize & Snapshot ---")
-    print("  Waiting for page to stabilize after navigation/login...")
-    mcp.call_tool("browser_wait_for", {"time": 5}) 
-    
-    # Force a fresh snapshot capture
+    # ── Step 2: Get Snapshot ──────────────────────────────────────────────────
+    print("\n--- Step 2: Snapshot ---")
     snapshot = mcp.call_tool("browser_snapshot", {})
     
-    # Fallbacks if direct capture fails
+    # Fallbacks for empty snapshot
     if not snapshot or snapshot == "Snapshot empty.":
         path = extract_snapshot_path(nav_result)
         if path:
             snapshot = find_and_read_snapshot_file(os.path.basename(path))
-            
     if not snapshot or snapshot == "Snapshot empty.":
         snapshot = find_and_read_latest_snapshot()
 
-    if not snapshot or snapshot == "Snapshot empty.":
-        print("STUCK: Could not get page snapshot after stabilization.")
+    if not snapshot:
+        print("STUCK: Could not get page snapshot.")
         mcp.stop()
         return
 
-    print(f"  [snapshot: {len(snapshot)} chars]")
-    print(f"  preview:\n{snapshot[:600]}\n...")
-
-    # ── Step 3: LLM picks the search box ref ─────────────────────────────────
+    # ── Step 3: Find search ref ───────────────────────────────────────────────
     print("\n--- Step 3: Find search ref ---")
     ref = pick_search_ref(snapshot)
 
     if not ref:
-        print("Could not find search box. Trying browser_press_key '/'...")
+        print("Could not find search box. Trying '/' key...")
         mcp.call_tool("browser_press_key", {"key": "/"})
-        mcp.call_tool("browser_wait_for", {"time": 2})
+        mcp.call_tool("browser_wait_for", {"time": 1})
         snapshot = mcp.call_tool("browser_snapshot", {})
         ref = pick_search_ref(snapshot)
 
@@ -348,62 +340,60 @@ def run_agent(goal: str, start_url: str):
     print("\n--- Step 4: Type and submit ---")
     
     def attempt_type(target_ref, query_text):
-        type_result = mcp.call_tool("browser_type", {
+        return mcp.call_tool("browser_type", {
             "element": "search input",
             "target":  target_ref,
             "text":    query_text,
             "submit":  True,
             "slowly":  False,
         })
-        return type_result
 
     type_result = attempt_type(ref, query)
     print(f"  ↩ {type_result[:200]}")
 
-    # --- ROBUST ERROR RECOVERY ---
+    # Error Recovery
     if "Error" in type_result or "404" in type_result:
-        print("  ⚠️ Action failed. Re-snapshotting to recover state...")
-        mcp.call_tool("browser_wait_for", {"time": 3})
-        
+        print("  ⚠️ Action failed. Re-snapshotting to recover...")
+        mcp.call_tool("browser_wait_for", {"time": 2})
         snapshot = mcp.call_tool("browser_snapshot", {})
-        if not snapshot or snapshot == "Snapshot empty.":
-             snapshot = find_and_read_latest_snapshot()
-             
+        if not snapshot: snapshot = find_and_read_latest_snapshot()
+        
         if snapshot:
-            print("  [New snapshot captured. Re-evaluating target...]")
             new_ref = pick_search_ref(snapshot)
-            
-            if new_ref and new_ref != ref:
-                print(f"  [Ref updated: {ref} -> {new_ref}]")
-                ref = new_ref
-                print("  [Retrying action...]")
-                type_result = attempt_type(ref, query)
+            if new_ref:
+                print(f"  [Retrying with new ref: {new_ref}]")
+                type_result = attempt_type(new_ref, query)
                 print(f"  ↩ Retry: {type_result[:200]}")
-            elif new_ref == ref:
-                print("  [Ref unchanged. Attempting click-to-focus before retry...]")
-                mcp.call_tool("browser_click", {"element": "search area", "target": ref})
-                mcp.call_tool("browser_wait_for", {"time": 1})
-                type_result = attempt_type(ref, query)
-                print(f"  ↩ Retry after click: {type_result[:200]}")
-            else:
-                print("  ❌ Could not find input field in new snapshot.")
-        else:
-            print("  ❌ Failed to capture new snapshot for recovery.")
 
-    mcp.call_tool("browser_wait_for", {"time": 3})
+    # IMPORTANT: Wait longer for search results to load
+    print("  Waiting for search results to load...")
+    mcp.call_tool("browser_wait_for", {"time": 5}) 
+    
+    # IMPORTANT: Scroll down to trigger loading of video results in the DOM
+    print("  Scrolling down to ensure results are in snapshot...")
+    mcp.call_tool("browser_press_key", {"key": "PageDown"})
+    mcp.call_tool("browser_wait_for", {"time": 2})
 
     # ── Step 5: Confirm results ───────────────────────────────────────────────
     print("\n--- Step 5: Confirm results ---")
     result_snapshot = mcp.call_tool("browser_snapshot", {})
+    
+    # If snapshot is huge, we need to be smarter than just [:8000]
+    # Let's try to send the whole thing if it fits, or a larger chunk
+    # YouTube snapshots can be 100k+ chars. LLMs usually handle 32k-128k.
+    # Let's send up to 30,000 chars to catch the results area.
+    snapshot_content = result_snapshot[:30000] 
+    
     print(f"  [snapshot: {len(result_snapshot)} chars]")
-    print(f"  preview:\n{result_snapshot[:600]}")
+    print(f"  preview:\n{result_snapshot[:600]}...")
 
-    if confirm_success(result_snapshot, query):
+    if confirm_success(snapshot_content, query):
         print(f"\n{'='*60}")
         print(f"GOAL ACHIEVED: Searched '{query}' successfully.")
         print(f"{'='*60}")
     else:
         print("\nResults unclear — check the browser window.")
+        print("Hint: The search likely worked, but the LLM didn't see the results in the truncated snapshot.")
 
     mcp.stop()
 
