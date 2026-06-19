@@ -325,6 +325,11 @@ CRITICAL VERIFICATION RULES:
 4. HOMEPAGE TRAP:
    - If the snapshot shows a general feed, "Home", "Trending", or a search bar as the main focus, you are likely still on the Homepage. Return success: false.
 
+5. CONTENT VERIFICATION CHECKLIST:
+   - "Open Email": Look for a Sender Name, Subject Line, and Body Text in the main area. 
+     If these are present, you are NOT in the Inbox list anymore. You are in the email view.
+   - "Inbox List": Look for a list of rows with checkboxes and short summaries.
+
 DECISION PROCESS:
 1. Look at the URL. Does it match the goal? (e.g., /trash for Bin)
 2. Look at the Main Content Area (not the sidebar). What is displayed there?
@@ -409,12 +414,17 @@ def run_agent(goal: str, start_url: str):
             break
         last_action_signature = current_sig
         print(f"  [Plan]: {action} - {plan.get('reason', '')}")
-        # 4. Execute Move
         if action == "click":
             ref = plan.get("ref")
             if ref:
-                mcp.call_tool("browser_click", {"element": "navigation link", "target": ref})
-                mcp.call_tool("browser_wait_for", {"time": 5}) # Longer wait for SPAs
+                # 1. Select the item
+                mcp.call_tool("browser_click", {"element": "target", "target": ref})
+                mcp.call_tool("browser_wait_for", {"time": 1})
+                
+                # 2. Open it using Enter key
+                print(f"    → Pressing Enter to open selected item")
+                mcp.call_tool("browser_press_key", {"key": "Enter"})
+                mcp.call_tool("browser_wait_for", {"time": 3})
             else:
                 print("  [Error] Plan said click but no ref provided.")
         elif action == "type_search":
