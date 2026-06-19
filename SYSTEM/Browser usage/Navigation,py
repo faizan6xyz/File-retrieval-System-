@@ -8,7 +8,7 @@ from openai import OpenAI
 import shutil
 client = OpenAI(
     base_url="https://integrate.api.nvidia.com/v1",
-    api_key="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"
+    api_key="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"
 )
 NIM_MODEL = "meta/llama-3.1-8b-instruct"
 MCP_BASE = "http://localhost:3000/mcp"
@@ -252,25 +252,40 @@ def plan_navigation_step(goal: str, snapshot: str) -> dict:
         print(f"    [ERROR] Planning failed: {e}")
         return {"action": "done", "success": False}
 GOAL_CHECK_PROMPT = """You are an intelligent verification agent. 
-Your task is to determine if the current webpage satisfies the user's goal.
+Your task is to determine if the user has ACTUALLY ARRIVED at the destination page they requested.
 
 User Goal: "{goal}"
 Current Page Snapshot: 
 {snapshot}
 
 CRITICAL VERIFICATION RULES:
-1. CONTENT VS. LINKS: 
-   - If the goal is to "open" or "go to" a page, you must see the CONTENT of that page (headings, lists of items, specific forms).
-   - Seeing a LINK or BUTTON that leads to the goal is NOT success. It means you are still on the previous page.
-2. HOMEPAGE TRAP: 
-   - If the snapshot shows a general feed, "Home", "Trending", or a search bar as the main focus, you are likely still on the Homepage. Return success: false.
-3. SPECIFIC IDENTIFIERS:
-   - For "Liked videos": You must see a heading "Liked videos" or a list of videos. A sidebar link is insufficient.
-   - For "Settings": You must see toggles, input fields, or "Account" headings.
-   - For "Cart": You must see a list of products or a "Checkout" button.
 
-Reply with ONLY a JSON object: 
-{{"success": true/false, "reason": "Explain strictly why the content matches. If you only see a link, say 'Only saw a link, not content'."}}
+1. SIDEBAR vs. MAIN CONTENT (THE "GOOGLE DRIVE" RULE):
+   - Many apps (like Google Drive, Gmail, Outlook) have a permanent sidebar with links (e.g., "My Drive", "Bin", "Starred").
+   - **CRITICAL:** Seeing "Bin" in the sidebar/menu does NOT mean you are in the Bin. It just means the link exists.
+   - You are ONLY in the Bin if the **MAIN CONTENT AREA** (the large central part of the screen) shows deleted files, a "Empty Bin" button, or a heading that says "Bin" or "Trash".
+   - If the Main Content shows your regular files/folders, you are still on "My Drive", even if "Bin" is highlighted in the sidebar.
+
+2. URL PATH VERIFICATION:
+   - Check the URL in the snapshot.
+   - If Goal is "Bin": URL should contain "/trash", "/bin", or "/deleted".
+   - If URL is still "/my-drive" or "/drive/u/0/", you are NOT in the Bin.
+
+3. CONTENT VS. LINKS:
+   - If the goal is to "open" or "go to" a section, you must see the CONTENT of that section.
+   - Seeing a LINK or BUTTON that leads to the goal is NOT success.
+
+4. HOMEPAGE TRAP:
+   - If the snapshot shows a general feed, "Home", "Trending", or a search bar as the main focus, you are likely still on the Homepage. Return success: false.
+
+DECISION PROCESS:
+1. Look at the URL. Does it match the goal? (e.g., /trash for Bin)
+2. Look at the Main Content Area (not the sidebar). What is displayed there?
+3. If Main Content shows regular files/folders → FAIL (Still on My Drive).
+4. If Main Content shows deleted items/empty state → SUCCESS.
+
+Reply with ONLY a JSON object:
+{{"success": true/false, "reason": "Explain strictly. Mention the URL path and what is in the MAIN CONTENT area. If you only see a sidebar link, say 'Only saw sidebar link, main content is still [X]'."}}
 """
 def check_goal_completion(goal: str, snapshot: str) -> dict:
     content_snippet = snapshot[:8000] 
@@ -356,8 +371,13 @@ def run_agent(goal: str, start_url: str):
             else:
                 print("  [Error] Plan said click but no ref provided.")
         elif action == "type_search":
-            #add searching.py
-            addingfile = "Searching.py"
+            query = plan.get("query")
+            if query:
+                search_ref = pick_search_ref(snapshot)
+                if search_ref:
+                    mcp.call_tool("browser_type", {"element": "search box", "target": search_ref, "text": query})
+                    mcp.call_tool("browser_press_key", {"key": "Enter"})
+                    mcp.call_tool("browser_wait_for", {"time": 5})
                     
         elif action == "navigate":
             url = plan.get("url")
