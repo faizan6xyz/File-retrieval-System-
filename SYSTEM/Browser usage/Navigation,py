@@ -70,6 +70,24 @@ class MCPClient:
         self._tools = []
         self._keepalive_thread = None
         self._stop_keepalive = threading.Event()
+        self._lock = threading.Lock()   # add this
+
+    def _rpc(self, method: str, params: dict | None = None) -> dict:
+        with self._lock:   # wrap the whole body
+            payload = {"jsonrpc": "2.0", "id": self._next_id(), "method": method}
+            if params:
+                payload["params"] = params
+            resp = self._do_post(payload)
+            if resp.status_code == 404:
+                print(f"[MCP] 404 body: {resp.text[:300]!r}")
+                print("[MCP] 404 — reconnecting...")
+                self._session_id = None
+                self._handshake()
+                resp = self._do_post(payload)
+            resp.raise_for_status()
+            if "mcp-session-id" in resp.headers:
+                self._session_id = resp.headers["mcp-session-id"]
+            return self._parse_sse(resp.text)
     
     def _keepalive_loop(self):
         """Send periodic pings to prevent session timeout"""
@@ -143,21 +161,7 @@ class MCPClient:
             self._session_id = resp.headers["mcp-session-id"]
         self._do_post({"jsonrpc": "2.0", "method": "notifications/initialized"})
         print(f"[MCP] Session: {self._session_id}")
-    def _rpc(self, method: str, params: dict | None = None) -> dict:
-        payload = {"jsonrpc": "2.0", "id": self._next_id(), "method": method}
-        if params:
-            payload["params"] = params
-        resp = self._do_post(payload)
-        if resp.status_code == 404:
-            print(f"[MCP] 404 body: {resp.text[:300]!r}")
-            print("[MCP] 404 — reconnecting...")
-            self._session_id = None
-            self._handshake()
-            resp = self._do_post(payload)
-        resp.raise_for_status()
-        if "mcp-session-id" in resp.headers:
-            self._session_id = resp.headers["mcp-session-id"]
-        return self._parse_sse(resp.text)
+    
     def _coerce_args(self, arguments: dict, tool_name: str) -> dict:
         if tool_name == "browser_snapshot":
             arguments.pop("filename", None)
@@ -240,46 +244,49 @@ class MCPClient:
                         return file_content
             return find_and_read_latest_snapshot() or "Snapshot empty."
         return text if text else "OK"
-NAV_PLANNER_PROMPT = """You are an autonomous browser navigation agent. 
-Your goal is to reach a specific destination on the website starting from the current page.
+NAV_PLANNER_PROMPT = """You are a browser navigation planner. You decide the SINGLE next action to move toward the user's goal. You do not execute anything yourself — you only output a decision as JSON.
 
-Current Goal: "{goal}"
-Current Page Title/URL info is in the snapshot.
+GOAL: {goal}
 
-Available Actions:
-1. "click": Click a link, button, OR FOLDER. You MUST provide the 'ref' of the element.
-2. "type_search": Type a query into the main search bar and submit. Provide 'query'.
-3. "navigate": Go to a direct URL if you know it.
-4. "done": You have reached the goal. Set 'success' to true or false.
+You will be shown the current page's accessibility snapshot (elements, refs, text, URL).
 
-CRITICAL GOOGLE DRIVE RULES:
-- SIDEBAR ≠ MAIN CONTENT: The left sidebar contains navigation links (My Drive, Shared, Bin). 
-  The MAIN CONTENT AREA (center/right) contains files and folders.
-- TO OPEN A FOLDER: You must click the folder IN THE MAIN CONTENT AREA, NOT the sidebar.
-- If the goal mentions a folder name (e.g., "Colab Notebooks"), look for that folder 
-  in the main grid/list view, NOT in the sidebar navigation.
-- NEVER click a sidebar link that matches the CURRENT page title. 
-  Example: If you're on "My Drive" and see "My Drive" in sidebar, DO NOT click it.
-- When searching for a folder, check BOTH the sidebar AND main content, but prioritize 
-  main content for opening/navigating into folders.
+## AVAILABLE ACTIONS (choose exactly one)
+- "click": click an element. Requires "ref" — the EXACT ref string from the snapshot (e.g. "e42"). Never invent a ref that isn't in the snapshot.
+- "navigate": go to a specific URL. Requires "url" — a full https:// URL. Only use a URL you were given or that you saw in the snapshot. Never guess one.
+- "done": the goal is already achieved based on the current snapshot, OR it cannot be achieved with the actions available. Requires "success": true or false.
 
-Rules:
-- Look for links/buttons/folders in the snapshot that match the goal semantically.
-- If you see a search bar and no obvious link/folder, use "type_search".
-- Do NOT click random things. Be precise.
-- Reply with ONLY a JSON object. No markdown fences.
+## RULES
+1. Output ONLY a single JSON object, nothing else — no markdown fences, no explanation outside the JSON.
+2. Only use a "ref" that appears verbatim in the snapshot you were shown. Never fabricate one.
+3. If the snapshot shows a CAPTCHA, "verify you are human", a login wall, or a file-download prompt, output {{"action": "done", "success": false, "reason": "blocked: <short reason>"}}.
+4. If you are unsure what's on the page or no clear next step is visible, prefer "navigate" only if you have a known URL; otherwise output "done" with success false and explain why in "reason".
+5. Always include a short "reason" field explaining the choice.
+6. Do not repeat an identical action you have already taken if the page did not change — choose "done" with success false instead.
 
-Example Reply for clicking a FOLDER in main content:
-{{"action": "click", "ref": "e45", "reason": "Folder 'Colab Notebooks' found in main content grid"}}
+## OUTPUT FORMAT (strict)
+{{"action": "<click|type_search|navigate|done>", "ref": "<only for click>", "query": "<only for type_search>", "url": "<only for navigate>", "success": <only for done, true/false>, "reason": "<short reason>"}}
 
-Example Reply for clicking a sidebar navigation link:
-{{"action": "click", "ref": "e12", "reason": "Sidebar link 'Bin' to navigate to trash section"}}
+## EXAMPLES
 
-Example Reply for searching:
-{{"action": "type_search", "query": "Colab Notebooks", "reason": "Folder not visible in current view, searching instead"}}
+Goal: "Find the pricing page on example.com"
+Snapshot shows a nav link "Pricing" with ref "e14":
+{{"action": "click", "ref": "e14", "reason": "Pricing link found in nav bar"}}
 
-Example Reply if done:
-{{"action": "done", "success": true, "reason": "Inside Colab Notebooks folder, seeing .ipynb files"}}
+Goal: "Search for wireless headphones"
+Snapshot shows a search input, no results yet:
+{{"action": "type_search", "query": "wireless headphones", "reason": "Search box visible, no query entered yet"}}
+
+Goal: "Go to the trash/bin folder"
+Snapshot shows only the homepage with no bin link visible, but URL pattern is known:
+{{"action": "navigate", "url": "https://drive.google.com/drive/trash", "reason": "Bin link not visible, navigating directly to known trash URL"}}
+
+Snapshot shows a CAPTCHA challenge:
+{{"action": "done", "success": false, "reason": "blocked: CAPTCHA detected"}}
+
+Goal achieved — main content area shows the pricing table:
+{{"action": "done", "success": true, "reason": "Pricing table visible in main content area"}}
+
+Now look at the snapshot you're given and output your single JSON decision.
 """
 def plan_navigation_step(goal: str, snapshot: str) -> dict:
     try:
@@ -357,19 +364,7 @@ def check_goal_completion(goal: str, snapshot: str) -> dict:
         return json.loads(raw)
     except json.JSONDecodeError:
         return {"success": False, "reason": "Failed to parse LLM response"}
-PICKER_PROMPT = """Find the SEARCH INPUT field ref. Reply with ONLY the ref value (e.g., e42) or NONE."""
-def pick_search_ref(snapshot: str) -> str | None:
-    response = client.chat.completions.create(
-        model=NIM_MODEL,
-        messages=[
-            {"role": "system", "content": PICKER_PROMPT},
-            {"role": "user", "content": snapshot[:15000]},
-        ],
-        max_tokens=10,
-        temperature=0,
-    )
-    ref = response.choices[0].message.content.strip().strip('"').strip("'")
-    return None if ref.upper() == "NONE" else ref
+
 def run_agent(goal: str, start_url: str):
     mcp = MCPClient()
     mcp.start()
@@ -378,8 +373,10 @@ def run_agent(goal: str, start_url: str):
     print(f"URL  : {start_url}")
     print("=" * 60)
     # Initial Navigation
+    import random 
+    wait_time = random.uniform(1.5, 4.0)
     mcp.call_tool("browser_navigate", {"url": start_url})
-    mcp.call_tool("browser_wait_for", {"time": 5})
+    mcp.call_tool(f"browser_wait_for", {"time": wait_time})
     last_action_signature = "" 
     for step in range(1, MAX_NAV_STEPS + 1):
         print(f"\n--- Step {step}: Planning ---")
@@ -426,16 +423,7 @@ def run_agent(goal: str, start_url: str):
                 mcp.call_tool("browser_press_key", {"key": "Enter"})
                 mcp.call_tool("browser_wait_for", {"time": 3})
             else:
-                print("  [Error] Plan said click but no ref provided.")
-        elif action == "type_search":
-            query = plan.get("query")
-            if query:
-                search_ref = pick_search_ref(snapshot)
-                if search_ref:
-                    mcp.call_tool("browser_type", {"element": "search box", "target": search_ref, "text": query})
-                    mcp.call_tool("browser_press_key", {"key": "Enter"})
-                    mcp.call_tool("browser_wait_for", {"time": 5})
-                    
+                print("  [Error] Plan said click but no ref provided.")   
         elif action == "navigate":
             url = plan.get("url")
             if url:
