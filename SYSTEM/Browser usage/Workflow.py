@@ -1,6 +1,6 @@
 import os
 from openai import OpenAI
-
+import json
 MODEL_NAME = "meta/llama-3.3-70b-instruct" # Or another suitable reasoning model
 client = OpenAI(
     base_url="https://integrate.api.nvidia.com/v1",
@@ -29,7 +29,7 @@ Every "target" you output for click/type MUST be a ref string that appears
 VERBATIM, character-for-character, in the Current State below. If you cannot find
 an exact match, you MUST NOT invent, guess, reuse an old ref, or modify one.
 In that case, output "wait" or "navigate" instead. 
-Don't use type and click in for search , just use search action for it . 
+Never use type and click in for search , Always use search action for it . 
 
 ═══════════════════════════════════════════
 ACTION REFERENCE — exact field usage per action
@@ -90,7 +90,43 @@ FINAL REMINDER
     except Exception as e:
         print(f"Error calling NVIDIA NIM: {e}")
         return None
+def humanize_step(step_json):
+    """Convert the raw JSON step into a plain-English sentence."""
+    try:
+        data = json.loads(step_json)
+    except (json.JSONDecodeError, TypeError):
+        return f"Unrecognized step output: {step_json}"
+
+    action = data.get("action")
+    target = data.get("target")
+    value = data.get("value")
+
+    if action == "navigate":
+        return f"go to {target}"
+    elif action == "click":
+        return f"Click ({target})"
+    elif action == "type":
+        return f"Type '{value}' into element ({target})"
+    elif action == "search":
+        return f"Search '{value}')"
+    elif action == "wait":
+        return f"Wait for {value} seconds"
+    elif action == "scroll":
+        return f"Scroll {target} by {value} pixels"
+    elif action == "extract_text":
+        return "Extract text from the current page"
+    elif action == "extract_files":
+        return "Extract files from the current page"
+    elif action == "finish":
+        if str(value).lower() == "true":
+            return "Finish — goal achieved"
+        else:
+            return "Finish — goal not achieved or blocked"
+    else:
+        return f"Unknown action: {action}"
 steps = []
+human = []
+
 def execute_automation(goal, max_steps=10):
     print(f" Starting Automation for Goal: '{goal}'\n")
     current_state = "Browser is open on homepage."
@@ -104,6 +140,10 @@ def execute_automation(goal, max_steps=10):
             break     
         print(f" LLM Decision: {next_step_json}")
         previous_steps.append(next_step_json)
+        human_step = humanize_step(next_step_json)
+        human.append(human_step)
+        print(f" Human-readable: {human_step}")
+
         if '"finish"' in next_step_json.lower():
             print(" Goal achieved! Automation complete.")
             break
@@ -112,4 +152,7 @@ def execute_automation(goal, max_steps=10):
 if __name__ == "__main__":
     user_goal = input("Whats your goal : ")
     execute_automation(user_goal)
-    print(steps)
+    print("\nRaw steps:", steps)
+    print("\nHuman-readable steps:")
+    for h in human:
+        print(f"- {h}")
