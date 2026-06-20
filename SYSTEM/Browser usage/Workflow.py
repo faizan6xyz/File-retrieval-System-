@@ -29,7 +29,7 @@ Every "target" you output for click/type MUST be a ref string that appears
 VERBATIM, character-for-character, in the Current State below. If you cannot find
 an exact match, you MUST NOT invent, guess, reuse an old ref, or modify one.
 In that case, output "wait" or "navigate" instead. 
-Never use type and click in for search , Always use search action for it . 
+Don't use type and click in for search , just use search action for it . 
 
 ═══════════════════════════════════════════
 ACTION REFERENCE — exact field usage per action
@@ -66,7 +66,7 @@ FINAL REMINDER
 - Output ONE JSON object. No markdown fences. No text before or after it.
 - "target" for click/type must be copied verbatim from Current State — never fabricated.
 - If the same target/action was just attempted with no change in Current State, choose "finish" with value "false" instead of repeating it.
-"""
+""".format(goal=goal)
     steps_history = "\n".join([f"{i+1}. {step}" for i, step in enumerate(previous_steps)]) if previous_steps else "No steps taken yet."
     user_prompt = f"""
     Goal: {goal}
