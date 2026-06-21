@@ -6,14 +6,10 @@ import glob
 import requests
 import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from dotenv import load_dotenv
 from openai import OpenAI
-
-load_dotenv()
-
 client = OpenAI(
     base_url="https://integrate.api.nvidia.com/v1",
-    api_key="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"
+    api_key=os.getenv("NVIDIA_API_KEY")
 )
 NIM_MODEL = "meta/llama-3.1-8b-instruct"
 MCP_BASE = "http://localhost:3000/mcp"
@@ -21,7 +17,6 @@ OUTPUT_DIR = "extracted_md"
 CHUNK_SIZE = 12000
 MAX_WORKERS = 6
 MAX_CHUNKS = 15
-
 END_BOUNDARY_HEADINGS = {
     "references", "external links", "see also", "notes",
     "further reading", "bibliography", "citations", "footnotes",
@@ -30,12 +25,6 @@ END_BOUNDARY_HEADINGS = {
     "newsletter", "subscribe", "share this article", "more from",
 }
 MIN_TITLE_HEADING_LEVEL = 2
-
-
-# ---------------------------------------------------------------------------
-# MCP CLIENT (with improved session management)
-# ---------------------------------------------------------------------------
-
 class MCPClient:
     def __init__(self, base_url: str = MCP_BASE):
         self.base_url = base_url
@@ -159,7 +148,7 @@ class MCPClient:
                 self._rpc("ping", {})
             except Exception:
                 pass
-            self._stop_keepalive.wait(timeout=3)  # Ping every 3 seconds (server timeout is 5s)
+            self._stop_keepalive.wait(timeout=3)  # Ping every 3 seconds
 
     def start(self):
         self._handshake()
@@ -171,6 +160,19 @@ class MCPClient:
         self._stop_keepalive.set()
         if self._keepalive_thread:
             self._keepalive_thread.join(timeout=5)
+
+    def pause_keepalive(self):
+        """Temporarily stop keepalive pings during heavy operations"""
+        self._stop_keepalive.set()
+        if self._keepalive_thread:
+            self._keepalive_thread.join(timeout=2)
+
+    def resume_keepalive(self):
+        """Resume keepalive pings"""
+        self._stop_keepalive.clear()
+        if not self._keepalive_thread or not self._keepalive_thread.is_alive():
+            self._keepalive_thread = threading.Thread(target=self._keepalive_loop, daemon=True)
+            self._keepalive_thread.start()
 
     def call_tool(self, name: str, arguments: dict) -> str:
         for attempt in range(3):
@@ -216,12 +218,7 @@ def find_and_read_latest_snapshot() -> str:
         time.sleep(0.2)
         with open(latest_file, "r", encoding="utf-8") as f:
             return f.read()
-    return ""
-
-
-# ---------------------------------------------------------------------------
-# MAIN-CONTENT-AWARE SNAPSHOT PARSING
-# ---------------------------------------------------------------------------
+    return ''
 
 NODE_RE = re.compile(
     r'^\s*-?\s*(?P<role>[a-zA-Z]+)'
@@ -297,11 +294,6 @@ def extract_main_content(snapshot: str) -> str:
             print(f"[Main Content] Article title detected: \"{title_preview}\"")
 
     return nodes_to_text(main_nodes)
-
-
-# ---------------------------------------------------------------------------
-# LLM-DRIVEN MARKDOWN STRUCTURING
-# ---------------------------------------------------------------------------
 
 CHUNK_PROMPT = """You are converting cleaned web-page content into clean,
 human-readable Markdown. You will be given ONE CHUNK of a larger article
@@ -426,38 +418,31 @@ def save_markdown(markdown: str, title_hint: str) -> str:
         f.write(markdown)
     print(f"[Saved] {path}")
     return path
-
-
-# ---------------------------------------------------------------------------
-# MAIN
-# ---------------------------------------------------------------------------
-
 def extract_page_to_markdown(url: str) -> str:
     mcp = MCPClient()
     mcp.start()
 
     print(f"[Navigate] {url}")
+    mcp.pause_keepalive()
     mcp.call_tool("browser_navigate", {"url": url})
-    time.sleep(1)  # Wait for page to stabilize
-    
+    time.sleep(1)
     mcp.call_tool("browser_wait_for", {"time": 2})
-    time.sleep(0.5)  # Small delay between tool calls
+    time.sleep(0.5)
 
     snapshot = mcp.call_tool("browser_snapshot", {})
+    
+    # Resume keepalive for the long LLM processing phase
+    mcp.resume_keepalive()
+    
     if not snapshot or len(snapshot) < 20:
         snapshot = find_and_read_latest_snapshot()
     if not snapshot:
         raise RuntimeError("Could not obtain a snapshot of the page.")
-
     markdown = structure_snapshot_with_llm(snapshot, url, mcp)
-
     title_hint = url.split("//")[-1].split("/")[0]
     path = save_markdown(markdown, title_hint)
-    
     mcp.stop()
     return path
-
-
 if __name__ == "__main__":
     url = input("Enter the URL to extract : ").strip()
     output_path = extract_page_to_markdown(url)
