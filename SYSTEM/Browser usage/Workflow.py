@@ -4,7 +4,7 @@ import json
 MODEL_NAME = "meta/llama-3.3-70b-instruct" # Or another suitable reasoning model
 client = OpenAI(
     base_url="https://integrate.api.nvidia.com/v1",
-    api_key="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"
+    api_key="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"
 )
 def get_next_step(goal, current_state, previous_steps):
     system_prompt = """
