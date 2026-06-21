@@ -28,7 +28,7 @@ ABSOLUTE GROUNDING RULE (read this twice)
 Every "target" you output for click/type MUST be a ref string that appears
 VERBATIM, character-for-character, in the Current State below. If you cannot find
 an exact match, you MUST NOT invent, guess, reuse an old ref, or modify one.
-In that case, output "wait" or "navigate" instead. 
+In that case, output "navigate" instead. 
 Don't use type and click in for search , just use search action for it . 
 
 ═══════════════════════════════════════════
@@ -40,7 +40,6 @@ ACTION REFERENCE — exact field usage per action
 | click         | exact ref from Current State     | null               |
 | type          | exact ref from Current State     | text to type       |
 | search        | exact ref of search input        | search query text  |
-| wait          | null                             | seconds (integer)  |
 | scroll        | "up" or "down"                   | pixels (integer)   |
 | extract_text  | null                             | null               |
 | extract_files | null                             | null               |
@@ -109,8 +108,6 @@ def humanize_step(step_json):
         return f"Type '{value}' into element ({target})"
     elif action == "search":
         return f"Search '{value}')"
-    elif action == "wait":
-        return f"Wait for {value} seconds"
     elif action == "scroll":
         return f"Scroll {target} by {value} pixels"
     elif action == "extract_text":
