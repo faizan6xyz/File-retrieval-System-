@@ -7,16 +7,20 @@ import requests
 from openai import OpenAI
 import threading
 import shutil
+import random
+
 client = OpenAI(
     base_url="https://integrate.api.nvidia.com/v1",
-    api_key="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"
+    api_key="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"
 )
 NIM_MODEL = "meta/llama-3.1-8b-instruct"
 MCP_BASE = "http://localhost:3000/mcp"
 MAX_NAV_STEPS = 3 
+
 def extract_snapshot_path(text: str) -> str | None:
     match = re.search(r"\[Snapshot\]\(([^)]+)\)", text)
     return match.group(1) if match else None
+
 def find_and_read_snapshot_file(filename: str) -> str:
     current_dir = os.getcwd()
     while True:
@@ -30,6 +34,7 @@ def find_and_read_snapshot_file(filename: str) -> str:
             break
         current_dir = parent
     return ""
+
 def find_and_read_latest_snapshot() -> str:
     current_dir = os.getcwd()
     latest_file, latest_mtime = None, 0
@@ -49,19 +54,7 @@ def find_and_read_latest_snapshot() -> str:
         with open(latest_file, "r", encoding="utf-8") as f:
             return f.read()
     return ""
-# In your MCPClient class, update _do_post and add keepalive
-def _do_post(self, payload: dict) -> requests.Response:
-    try:
-        resp = requests.post(
-            self.base_url, 
-            json=payload,
-            headers=self._headers(), 
-            timeout=60  # Increase timeout from 30 to 60
-        )
-        return resp
-    except requests.exceptions.Timeout:
-        print("[MCP] Request timed out - session may be dead")
-        raise RuntimeError("MCP timeout")
+
 class MCPClient:
     def __init__(self, base_url: str = MCP_BASE):
         self.base_url = base_url
@@ -70,10 +63,10 @@ class MCPClient:
         self._tools = []
         self._keepalive_thread = None
         self._stop_keepalive = threading.Event()
-        self._lock = threading.Lock()   # add this
+        self._lock = threading.Lock()
 
     def _rpc(self, method: str, params: dict | None = None) -> dict:
-        with self._lock:   # wrap the whole body
+        with self._lock:
             payload = {"jsonrpc": "2.0", "id": self._next_id(), "method": method}
             if params:
                 payload["params"] = params
@@ -93,14 +86,13 @@ class MCPClient:
         """Send periodic pings to prevent session timeout"""
         while not self._stop_keepalive.is_set():
             try:
-                self._rpc("ping", {})  # or tools/list if ping isn't supported
+                self._rpc("ping", {})
             except Exception:
                 pass
-            self._stop_keepalive.wait(timeout=15)  # Ping every 15 seconds
+            self._stop_keepalive.wait(timeout=15)
     
     def start(self):
         self._handshake()
-        # Start keepalive thread
         self._stop_keepalive.clear()
         self._keepalive_thread = threading.Thread(target=self._keepalive_loop, daemon=True)
         self._keepalive_thread.start()
@@ -111,15 +103,18 @@ class MCPClient:
         if self._keepalive_thread:
             self._keepalive_thread.join(timeout=5)
         print("[MCP] Done.")
+
     def _next_id(self) -> int:
         self._req_id += 1
         return self._req_id
+
     def _headers(self) -> dict:
         h = {"Content-Type": "application/json",
              "Accept": "application/json, text/event-stream"}
         if self._session_id:
             h["mcp-session-id"] = self._session_id
         return h
+
     def _parse_sse(self, text: str) -> dict:
         results = []
         for line in text.splitlines():
@@ -142,9 +137,11 @@ class MCPClient:
         for r in results:
             merged.update(r)
         return merged
+
     def _do_post(self, payload: dict) -> requests.Response:
         return requests.post(self.base_url, json=payload,
-                              headers=self._headers(), timeout=30)
+                              headers=self._headers(), timeout=60)
+
     def _handshake(self):
         payload = {
             "jsonrpc": "2.0", "id": self._next_id(),
@@ -202,10 +199,10 @@ class MCPClient:
         print(f"[MCP] {len(self._tools)} tools exposed: "
               f"{[t['function']['name'] for t in self._tools]}")
         return self._tools
+
     def call_tool(self, name: str, arguments: dict) -> str:
         arguments = self._coerce_args(arguments, name)
         print(f"    → {name}({json.dumps(arguments)[:150]})")
-        # Retry logic for 404s
         for attempt in range(3):
             try:
                 result = self._rpc("tools/call", {"name": name, "arguments": arguments})
@@ -220,8 +217,8 @@ class MCPClient:
                 else:
                     return f"### Error\n{str(e)}"
         return "### Error\nFailed after multiple retries."
+
     def _process_result(self, name: str, result: dict) -> str:
-        """Helper to extract text from result."""
         content = result.get("content", [])
         parts = []
         for c in content:
@@ -244,6 +241,8 @@ class MCPClient:
                         return file_content
             return find_and_read_latest_snapshot() or "Snapshot empty."
         return text if text else "OK"
+
+# Updated Prompt: Removed 'type_search' from allowed actions
 NAV_PLANNER_PROMPT = """You are a browser navigation planner. You decide the SINGLE next action to move toward the user's goal. You do not execute anything yourself — you only output a decision as JSON.
 
 GOAL: {goal}
@@ -262,19 +261,16 @@ You will be shown the current page's accessibility snapshot (elements, refs, tex
 4. If you are unsure what's on the page or no clear next step is visible, prefer "navigate" only if you have a known URL; otherwise output "done" with success false and explain why in "reason".
 5. Always include a short "reason" field explaining the choice.
 6. Do not repeat an identical action you have already taken if the page did not change — choose "done" with success false instead.
+7. check for the whole page not just the main content area , if the element on side bar or any other palce than main content area then click it 
 
 ## OUTPUT FORMAT (strict)
-{{"action": "<click|type_search|navigate|done>", "ref": "<only for click>", "query": "<only for type_search>", "url": "<only for navigate>", "success": <only for done, true/false>, "reason": "<short reason>"}}
+{{"action": "<click|navigate|done>", "ref": "<only for click>", "url": "<only for navigate>", "success": <only for done, true/false>, "reason": "<short reason>"}}
 
 ## EXAMPLES
 
 Goal: "Find the pricing page on example.com"
 Snapshot shows a nav link "Pricing" with ref "e14":
 {{"action": "click", "ref": "e14", "reason": "Pricing link found in nav bar"}}
-
-Goal: "Search for wireless headphones"
-Snapshot shows a search input with ref "e7", no query entered yet:
-{{"action": "type", "ref": "e7", "text": "wireless headphones", "reason": "Search box visible, no query entered yet"}}
 
 Goal: "Go to the trash/bin folder"
 Snapshot shows only the homepage with no bin link visible, but URL pattern is known:
@@ -288,6 +284,7 @@ Goal achieved — main content area shows the pricing table:
 
 Now look at the snapshot you're given and output your single JSON decision.
 """
+
 def plan_navigation_step(goal: str, snapshot: str) -> dict:
     try:
         response = client.chat.completions.create(
@@ -305,6 +302,7 @@ def plan_navigation_step(goal: str, snapshot: str) -> dict:
     except Exception as e:
         print(f"    [ERROR] Planning failed: {e}")
         return {"action": "done", "success": False}
+
 GOAL_CHECK_PROMPT = """You are an intelligent verification agent. 
 Your task is to determine if the user has ACTUALLY ARRIVED at the destination page they requested.
 
@@ -347,6 +345,7 @@ DECISION PROCESS:
 Reply with ONLY a JSON object:
 {{"success": true/false, "reason": "Explain strictly. Mention the URL path and what is in the MAIN CONTENT area. If you only see a sidebar link, say 'Only saw sidebar link, main content is still [X]'."}}
 """
+
 def check_goal_completion(goal: str, snapshot: str) -> dict:
     content_snippet = snapshot[:8000] 
     
@@ -366,70 +365,88 @@ def check_goal_completion(goal: str, snapshot: str) -> dict:
     except json.JSONDecodeError:
         return {"success": False, "reason": "Failed to parse LLM response"}
 
-def run_agent(goal: str, start_url: str):
+def run_agent(goal: str, start_url: str) -> str:
     mcp = MCPClient()
     mcp.start()
     mcp.list_tools()
     print(f"\nGoal : {goal}")
     print(f"URL  : {start_url}")
     print("=" * 60)
+    
+    current_url = start_url
+    last_action_signature = "" 
+    
     # Initial Navigation
-    import random 
     wait_time = random.uniform(1.5, 4.0)
     mcp.call_tool("browser_navigate", {"url": start_url})
     mcp.call_tool(f"browser_wait_for", {"time": wait_time})
-    last_action_signature = "" 
+    
     for step in range(1, MAX_NAV_STEPS + 1):
         print(f"\n--- Step {step}: Planning ---")
+        
         # 1. Get Current State
         snapshot = mcp.call_tool("browser_snapshot", {})
         if not snapshot or snapshot == "Snapshot empty.":
             snapshot = find_and_read_latest_snapshot()
+            
         if not snapshot:
             print("STUCK: Could not get snapshot.")
             break
+            
+        # Update current_url from snapshot if possible (simple regex extraction)
+        url_match = re.search(r"Page URL:\s*(https?://[^\s]+)", snapshot)
+        if url_match:
+            current_url = url_match.group(1)
+            print(f"  [Current URL]: {current_url}")
+
         # 2. Check if we are already done (BEFORE planning next move)
         status = check_goal_completion(goal, snapshot)
         print(f"  [LLM Status]: Success={status.get('success')} | Reason: {status.get('reason', 'Unknown')}")
+        
         # --- SAFETY NET: Prevent "Link Confusion" ---
         is_success = status.get("success", False)
         if is_success:
             reason_lower = status.get("reason", "").lower()
-            # If the reason mentions "link" but doesn't mention "heading", "list", "content", or "feed"
             if "link" in reason_lower and not any(word in reason_lower for word in ["heading", "list", "content", "feed", "video"]):
                 print("  [SAFETY OVERRIDE] LLM confused a sidebar link with the destination page. Ignoring success.")
                 is_success = False
+                
         if is_success:
             print(f"\n{'='*60}\nGOAL ACHIEVED: {status['reason']}\n{'='*60}")
             break
+            
         # 3. Plan Next Move
         plan = plan_navigation_step(goal, snapshot)
         action = plan.get("action")
-        # Detect Loop: If we are doing the exact same action again, stop.
+        
+        # Detect Loop
         current_sig = f"{action}_{plan.get('ref', '')}_{plan.get('query', '')}_{plan.get('url', '')}"
         if current_sig == last_action_signature:
             print("  [LOOP DETECTED] Agent is repeating the same action. Stopping.")
             break
         last_action_signature = current_sig
+        
         print(f"  [Plan]: {action} - {plan.get('reason', '')}")
+        
         if action == "click":
             ref = plan.get("ref")
             if ref:
-                # 1. Select the item
                 mcp.call_tool("browser_click", {"element": "target", "target": ref})
                 mcp.call_tool("browser_wait_for", {"time": 1})
                 
-                # 2. Open it using Enter key
                 print(f"    → Pressing Enter to open selected item")
                 mcp.call_tool("browser_press_key", {"key": "Enter"})
                 mcp.call_tool("browser_wait_for", {"time": 3})
             else:
                 print("  [Error] Plan said click but no ref provided.")   
+                
         elif action == "navigate":
             url = plan.get("url")
             if url:
+                current_url = url # Optimistically update URL
                 mcp.call_tool("browser_navigate", {"url": url})
                 mcp.call_tool("browser_wait_for", {"time": 5})
+                
         elif action == "done":
             print(f"  [Agent decided]: Done. Success: {plan.get('success')}")
             break
@@ -438,11 +455,13 @@ def run_agent(goal: str, start_url: str):
             break
     else:
         print("\nMax steps reached. Goal may not be achieved.")
+        
     mcp.stop()
+    return current_url
+
 if __name__ == "__main__":
     goal = input("Enter your goal : ").strip()
     start_url = input("Starting URL    : ").strip()
-    run_agent(goal, start_url)
     
-    
-    # instead of "click sent botton " use "click sent"
+    final_url = run_agent(goal, start_url)
+    print(f"\n[FINAL] Agent finished on URL: {final_url}")

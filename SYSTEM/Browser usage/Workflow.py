@@ -109,11 +109,11 @@ def humanize_step(step_json):
     if action == "navigate":
         return f"go to {target}"
     elif action == "click":
-        return f"Click ({target})"
+        return f"click {target}"
     elif action == "type":
-        return f"Type '{value}' into element ({target})"
+        return f"Type '{value}' into element {target})"
     elif action == "search":
-        return f"Search '{value}')"
+        return f"Search '{value}'"
     elif action == "scroll":
         return f"Scroll {target} by {value} pixels"
     elif action == "extract_text":
@@ -157,10 +157,10 @@ if __name__ == "__main__":
     execute_automation(user_goal)
     print("\nRaw steps:", steps)
     print("\nHuman-readable steps:")
-    for h in human:
+    lasturl = ""
+    for h in human:  # h is a list of strings
         print(f"- {h}")
-    from Searching import run_agent1
-    from Extract_text import extract_page_to_markdown
-    from Navigation import run_agent
-    from typeing import run_agent2
-    
+        if "navigate" in h :
+            lasturl = h = h.strip().replace("navigate", "").strip()
+        if "click" in h or "go to" in h :
+            lasturl = run_agent(h,lasturl)
