@@ -5,8 +5,8 @@ import faiss
 from fastembed import TextEmbedding
 from rank_bm25 import BM25Okapi
 _model = TextEmbedding("BAAI/bge-base-en-v1.5")
+# we are using chunking overlap in this because we dont want the chunks to loose context in the vectordb do each chunk has part of other one 
 def chunk_text(text, chunk_size=300, overlap=50):
-    """Simple word-based chunking with overlap."""
     words = text.split()
     chunks = []
     start = 0
@@ -16,8 +16,8 @@ def chunk_text(text, chunk_size=300, overlap=50):
         start += chunk_size - overlap
     return chunks
 def build_index(file_name,
-                folder_path="../Data",
-                chunk_path="../",
+                folder_path="SYSTEM/Data",
+                chunk_path="SYSTEM/",
                 index_path="rag_index.faiss",
                 chunks_path="chunks.npy"):
     file_path = os.path.join(folder_path, file_name)

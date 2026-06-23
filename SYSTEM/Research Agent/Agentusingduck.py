@@ -124,7 +124,7 @@ def parse_response(text: str):
         return "tool", (tool, input_)
     return "unknown", text
 def save_report(topic: str, content: str):
-    folder = "../Data"
+    folder = "SYSTEM/data"
     filename = topic[:40].replace(" ", "_") + "_report.md"
     filepath = os.path.join(folder, filename)
     with open(filepath, "w", encoding="utf-8") as f:

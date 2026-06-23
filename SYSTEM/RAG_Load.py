@@ -4,8 +4,8 @@ import faiss
 from fastembed import TextEmbedding
 from rank_bm25 import BM25Okapi
 model = TextEmbedding("BAAI/bge-base-en-v1.5")
-index = faiss.read_index("rag_index.faiss")
-all_chunks = np.load("chunks.npy", allow_pickle=True).tolist()
+index = faiss.read_index("SYSTEM/rag_index.faiss")
+all_chunks = np.load("SYSTEM/chunks.npy", allow_pickle=True).tolist()
 print(f"Loaded {len(all_chunks)} chunks from chunks.npy")
 tokenized_chunks = [chunk.lower().split() for chunk in all_chunks]
 bm25 = BM25Okapi(tokenized_chunks)

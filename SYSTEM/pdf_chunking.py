@@ -4,10 +4,10 @@ import os
 from fastembed import TextEmbedding
 from rank_bm25 import BM25Okapi
 _model = TextEmbedding("BAAI/bge-base-en-v1.5")
-def buildtext_vector(text, folder_path="../Data", chunk_path="../",
+def buildtext_vector(text, folder_path="SYSTEM/Data", chunk_path="SYSTEM/",
                       index_path="rag_index.faiss", chunks_path="chunks.npy"):
     new_embedding = np.array(list(_model.embed([text])), dtype=np.float32)
-    faiss.normalize_L2(new_embedding)
+    faiss.normalize_L2(new_embedding)   # L2 normalization rescales a vector so its length (magnitude) becomes exactly 1, while keeping its direction unchanged
     dimension = new_embedding.shape[1]
     full_index_path = os.path.join(chunk_path, index_path)
     full_chunks_path = os.path.join(chunk_path, chunks_path)
@@ -21,7 +21,7 @@ def buildtext_vector(text, folder_path="../Data", chunk_path="../",
                        if os.path.exists(full_chunks_path) else []
     index.add(new_embedding)
     existing_chunks.append(text)
-    tmp_index_path = full_index_path + ".tmp"
+    tmp_index_path = full_index_path + ".tmp" # temp file for backup and secuirty
     tmp_chunks_path = full_chunks_path + ".tmp"
     faiss.write_index(index, tmp_index_path)
     np.save(tmp_chunks_path, np.array(existing_chunks, dtype=object))
@@ -33,6 +33,13 @@ def buildtext_vector(text, folder_path="../Data", chunk_path="../",
     print("BM25 index rebuilt over all chunks.")
     return bm25
 
+def savepdf():
+    text1 = Extract_text()
+    buildtext_vector(text1)
+    
+
+if __name__ == "__main__" :
+    savepdf()
 
 
 
