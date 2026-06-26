@@ -86,3 +86,6 @@ PNG's approach (lossless, different strategy)
         [IEND chunk]  ← marks end of file
 
     Each chunk has: length (4 bytes) → type name (4 bytes, e.g. IHDR) → data → CRC checksum (4 bytes). That's why corrupting one byte inside a chunk usually causes a CRC mismatch and the decoder rejects the whole file outright — PNG actually checks integrity, unlike a raw bitstream.z
+
+
+LLM don't just gets the image directly first the compressed image gets decoded to the raw data for the model , and then its feed to the model directly 
