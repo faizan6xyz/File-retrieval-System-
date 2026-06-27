@@ -37,7 +37,7 @@ def describe_image(name: str,folder_path = "SYSTEM/Data", prompt: str = "Describ
         outputs[0][inputs.input_ids.shape[1]:],
         skip_special_tokens=True
     )
-    return response
+    return response , image_path
 if __name__ == "__main__":
     result = describe_image("h.png")
     print(result)
