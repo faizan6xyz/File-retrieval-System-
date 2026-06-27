@@ -2,7 +2,14 @@ import sys
 import os
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from vison_model_Qwen3b import describe_image
-result , source = describe_image("h.png")
-print(result)
 from Rag_create import build_index_from_text
-saving = build_index_from_text(result , source_name= source)
+def image_text(image_name):
+    result, source = describe_image(image_name)
+    if not result:
+        print(f"Nothing returned for {image_name} ny the Qwen")
+        return None 
+    print(f"About : {result}")
+    build_index_from_text(result, source_name=source)
+    print(f"{image_name} saved successfully")
+    return result  
+image_text("x.jpeg")
