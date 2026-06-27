@@ -1,7 +1,7 @@
 import sys
 import os
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-from vison_model_Qwen3b import describe_image
+from vison_model_Qwen3b_4bit_qunatization import describe_image
 from Rag_create import build_index_from_text
 def image_text(image_name):
     result, source = describe_image(image_name)
