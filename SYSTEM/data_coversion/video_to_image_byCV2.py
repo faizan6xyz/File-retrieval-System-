@@ -42,6 +42,7 @@ def video_text(name, data_dir="SYSTEM/Data", frames_per_second=1, quality=95 ):
     videofolder = extract_frames(video_path , frames_per_second , quality)
     if not videofolder:
         print(f"Error due to file not found or 0 fps argument")
+        return
     for item in os.listdir(videofolder):
         image_text(item , folder=videofolder,source=video_path)
 if __name__ == "__main__":

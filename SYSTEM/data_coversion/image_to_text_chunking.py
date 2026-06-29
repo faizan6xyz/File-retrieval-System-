@@ -15,4 +15,5 @@ def image_text(name,folder="SYSTEM/data",source=""):
     build_index_from_text(result, source_name=source)
     print(f"{image_name} saved successfully")
     return result  
-image_text("h.png")
+if __name__ == "__main__":
+    image_text("h.png")
