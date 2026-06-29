@@ -39,11 +39,13 @@ def extract_frames(video_path , frames_per_second=1, quality=95):
 comment = []
 def video_text(name, data_dir="SYSTEM/Data", frames_per_second=1, quality=95 ):
     video_path = os.path.join(data_dir,name)
+    video_name = os.path.splitext(os.path.basename(video_path))[0]
     videofolder = extract_frames(video_path , frames_per_second , quality)
     if not videofolder:
         print(f"Error due to file not found or 0 fps argument")
         return
     for item in os.listdir(videofolder):
         image_text(item , folder=videofolder,source=video_path)
+    os.rmdir(video_name)
 if __name__ == "__main__":
     video_text("xx.mp4")
