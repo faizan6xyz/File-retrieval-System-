@@ -1,0 +1,15 @@
+The method:
+
+    1.Split into sentences, embed each one individually with the MiniLM model.
+    
+    2.Compute cosine similarity between every pair of adjacent sentences (sentence i vs sentence i+1) — not a running chunk-mean like your RAG_Load.py version, just consecutive pairs.
+    
+    3.Find a similarity threshold using np.percentile(sims, 25) — i.e., the bottom 25% of adjacent-sentence similarities. These are treated as the weakest topical links in the document.
+    
+    4.Cut at those weak points — wherever similarity falls at or below that threshold, it's marked as a chunk boundary (cut_after).
+    
+    5.Build raw chunks from those boundaries.
+    
+    6.Merge small chunks together (the merged_chunks step) until each one hits at least min_chunk_tokens (50), so semantic cuts don't leave you with tiny useless fragments.
+    
+    7.Split oversized chunks by raw word/token count if a merged chunk exceeds chunk_size (400 tokens) — this part is not semantic, just a token-budget safety net.
