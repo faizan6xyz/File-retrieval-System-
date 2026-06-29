@@ -66,7 +66,7 @@ def describe_image(image_path, prompt: str = "Describe this image.", max_new_tok
             os.remove(resized_path)
     torch.cuda.empty_cache()
     gc.collect()
-    return response, image_path
+    return response
 if __name__ == "__main__":
     result, path = describe_image("h.png")
     print(result)
